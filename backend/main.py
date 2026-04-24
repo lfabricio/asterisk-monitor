@@ -66,27 +66,44 @@ async def get_endpoint_details(nome: str):
             raise HTTPException(status_code=404, detail="Endpoint não encontrado")
         raise HTTPException(status_code=500, detail=f"Erro ao buscar detalhes do endpoint: {str(e)}")
 
-@app.get("/api/monitor/3770")
-async def monitor_3770():
-    """Retorna o status simplificado do ramal 3770 para o monitoramento."""
+@app.get("/api/monitor/ramais")
+async def monitor_ramais():
+    """Retorna o status simplificado de todos os ramais numéricos."""
     try:
-        response = await http_client.get(f"{ARI_BASE}/endpoints/PJSIP/3770")
+        response = await http_client.get(f"{ARI_BASE}/endpoints/PJSIP")
         response.raise_for_status()
-        data = response.json()
+        endpoints = response.json()
         
-        estado = data.get("state", "unknown")
-        canais_ativos = len(data.get("channel_ids", []))
+        ramais = []
+        for ep in endpoints:
+            resource = ep.get("resource", "")
+            # Filtra apenas recursos que sejam apenas números (ignora trunks como cisco-gw)
+            if resource.isdigit():
+                estado = ep.get("state", "unknown")
+                canais_ativos = len(ep.get("channel_ids", []))
+                ramais.append({
+                    "ramal": resource,
+                    "status": estado,
+                    "canais_ativos": canais_ativos,
+                    "raw_data": ep
+                })
         
-        return {
-            "ramal": "3770",
-            "status": estado,
-            "canais_ativos": canais_ativos,
-            "raw_data": data
-        }
+        # Opcional: ordenar ramais em ordem crescente
+        ramais.sort(key=lambda x: int(x["ramal"]))
+        return ramais
     except httpx.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Ramal 3770 não encontrado")
-        raise HTTPException(status_code=500, detail=f"Erro ao monitorar ramal 3770: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar lista de ramais: {str(e)}")
+
+@app.get("/api/monitor/channels")
+async def monitor_channels():
+    """Retorna o número total de canais ativos (chamadas simultâneas) no PBX inteiro."""
+    try:
+        response = await http_client.get(f"{ARI_BASE}/channels")
+        response.raise_for_status()
+        canais = response.json()
+        return {"total_channels": len(canais), "raw_data": canais}
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar canais globais: {str(e)}")
 
 # Monta a pasta frontend para ser servida na raiz ("/")
 # O caminho é "../frontend" porque este script está dentro da pasta "backend"
