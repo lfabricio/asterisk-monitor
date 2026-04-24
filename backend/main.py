@@ -1,6 +1,8 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import httpx
 from dotenv import load_dotenv
 
@@ -23,6 +25,14 @@ async def lifespan(app: FastAPI):
     await http_client.aclose()
 
 app = FastAPI(title="Asterisk Monitor API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/api/asterisk/info")
 async def get_asterisk_info():
@@ -77,6 +87,10 @@ async def monitor_3770():
         if e.response is not None and e.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Ramal 3770 não encontrado")
         raise HTTPException(status_code=500, detail=f"Erro ao monitorar ramal 3770: {str(e)}")
+
+# Monta a pasta frontend para ser servida na raiz ("/")
+# O caminho é "../frontend" porque este script está dentro da pasta "backend"
+app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../frontend"), html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

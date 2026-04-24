@@ -3,3 +3,10 @@ examples/
 __pycache__/
 *.pyc
 venv/
+
+# Frontend (React/Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.eslintcache
+frontend/coverage/
