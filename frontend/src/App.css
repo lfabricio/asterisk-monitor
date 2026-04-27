@@ -270,3 +270,191 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+/* Charts Section Responsiveness */
+@media (max-width: 900px) {
+  .charts-section {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Period Selector Buttons */
+.btn-period {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-period:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.btn-period.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+/* Custom Scrollbar for Logs */
+.logs-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.logs-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+
+.logs-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.logs-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Custom Timeline Styles */
+.custom-timeline {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin-bottom: 8px;
+}
+
+.timeline-label {
+  width: 60px;
+  font-weight: 600;
+  color: var(--text-main);
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 12px;
+}
+
+.timeline-bar-container {
+  flex-grow: 1;
+  height: 100%;
+  position: relative;
+  background-color: rgba(255,255,255,0.02);
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.timeline-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.timeline-segment:hover {
+  opacity: 0.8;
+  z-index: 10;
+}
+
+.timeline-segment.online {
+  background-color: #00d2ff;
+}
+
+.timeline-segment.offline {
+  background-color: #ff4b4b;
+}
+
+/* Tooltip Styles */
+.timeline-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background-color: rgba(0,0,0,0.9);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.15);
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  transition: all 0.2s ease;
+}
+
+.timeline-segment:hover .timeline-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.timeline-tooltip strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+}
+
+.timeline-tooltip .duration {
+  margin-top: 6px;
+  color: #aaa;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 6px;
+  font-family: monospace;
+}
+
+/* X-Axis Styles */
+.timeline-xaxis {
+  display: flex;
+  align-items: flex-start;
+  height: 30px;
+  margin-top: 8px;
+}
+
+.timeline-label-spacer {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.timeline-ticks {
+  flex-grow: 1;
+  position: relative;
+  height: 100%;
+}
+
+.timeline-tick {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.tick-mark {
+  width: 1px;
+  height: 6px;
+  background-color: rgba(255,255,255,0.3);
+  margin-bottom: 4px;
+}
+
+.tick-label {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.7);
+  white-space: nowrap;
+}

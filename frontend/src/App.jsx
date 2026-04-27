@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import './App.css';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -12,6 +15,8 @@ function App() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [globalStatus, setGlobalStatus] = useState('loading');
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+  const [historyData, setHistoryData] = useState([]);
+  const [timelinePeriod, setTimelinePeriod] = useState(24);
 
   const formatStartupTime = (dateString) => {
     try {
@@ -34,6 +39,15 @@ function App() {
     } catch {
       return '--:--';
     }
+  };
+
+  const safeDateObj = (ts) => {
+    if (!ts) return new Date();
+    let clean = ts.toString();
+    if (clean.includes(' ')) clean = clean.replace(' ', 'T');
+    if (!clean.endsWith('Z')) clean += 'Z';
+    const d = new Date(clean);
+    return isNaN(d.getTime()) ? new Date() : d;
   };
 
   const groupChannels = (channels) => {
@@ -130,11 +144,21 @@ function App() {
       setActiveChannelsList([]);
     }
 
+    try {
+      const histRes = await fetch(`${API_BASE_URL}/monitor/history?hours=${timelinePeriod}`);
+      if (histRes.ok) {
+        const histData = await histRes.json();
+        setHistoryData(histData);
+      }
+    } catch (err) {
+      console.error("Error fetching history", err);
+    }
+
     setGlobalStatus(sysOk ? 'online' : 'offline');
     setLastUpdate(new Date().toLocaleTimeString('pt-BR'));
 
     setTimeout(() => setIsSpinning(false), 500);
-  }, []);
+  }, [timelinePeriod]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -149,6 +173,80 @@ function App() {
   const totalCanaisRamais = ramais.reduce((acc, curr) => acc + curr.canais_ativos, 0);
 
   const groupedActiveChannels = groupChannels(activeChannelsList);
+
+  const donutData = [
+    { name: 'Online', value: ramaisOnline, color: '#00d2ff' },
+    { name: 'Offline', value: totalRamais - ramaisOnline, color: '#ff4b4b' }
+  ];
+
+  // 1. Identificar ramais únicos (do histórico e do status atual)
+  const allRamalSet = new Set(ramais.map(r => r.ramal));
+  historyData.forEach(d => allRamalSet.add(d.ramal));
+  const uniqueRamais = Array.from(allRamalSet).sort();
+
+  const nowObj = new Date();
+  const xAxisMax = nowObj.getTime();
+  const xAxisMin = xAxisMax - (timelinePeriod * 60 * 60 * 1000);
+
+  // 2. Mapear cada ramal para intervalos contínuos de tempo (Timeline)
+  const timelineTracks = uniqueRamais.map((ramal) => {
+    const events = historyData.filter(d => d.ramal === ramal);
+    events.sort((a, b) => safeDateObj(a.timestamp).getTime() - safeDateObj(b.timestamp).getTime());
+
+    const currentRamalData = ramais.find(r => r.ramal === ramal);
+    const currentStatus = currentRamalData ? currentRamalData.status.toLowerCase() : 'offline';
+
+    const intervals = [];
+    let currentStart = xAxisMin;
+    let currentState = null;
+
+    if (events.length > 0) {
+      const firstEventTime = safeDateObj(events[0].timestamp).getTime();
+      currentStart = Math.max(xAxisMin, firstEventTime);
+      currentState = events[0].status.toLowerCase();
+
+      for (let i = 1; i < events.length; i++) {
+        const evTime = safeDateObj(events[i].timestamp).getTime();
+        const evState = events[i].status.toLowerCase();
+
+        if (evState !== currentState) {
+          intervals.push({
+            start: currentStart,
+            end: evTime,
+            status: currentState
+          });
+          currentStart = evTime;
+          currentState = evState;
+        }
+      }
+    } else {
+      currentState = currentStatus;
+    }
+
+    intervals.push({
+      start: currentStart,
+      end: xAxisMax,
+      status: currentState
+    });
+
+    return { ramal, intervals };
+  });
+
+  const formatTick = (ts) => {
+    const d = new Date(ts);
+    if (timelinePeriod <= 24) return format(d, 'HH:mm', { locale: ptBR });
+    if (timelinePeriod <= 168) return format(d, 'EEE HH:mm', { locale: ptBR });
+    return format(d, 'dd/MM HH:mm', { locale: ptBR });
+  };
+
+  const getTicks = () => {
+    const ticks = [];
+    const numTicks = timelinePeriod > 24 ? 6 : 5;
+    for (let i = 0; i <= numTicks; i++) {
+      ticks.push(xAxisMin + ((xAxisMax - xAxisMin) * (i / numTicks)));
+    }
+    return ticks;
+  };
 
   return (
     <div className="app-container">
@@ -179,6 +277,144 @@ function App() {
               <span>Canais Ativos (PBX Inteiro): <strong style={{ color: globalChannels > 0 ? 'var(--warning)' : 'inherit' }}>{globalChannels}</strong></span>
             </h2>
           </article>
+        </section>
+
+        {/* Charts Section */}
+        <section className="charts-section" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem', marginBottom: '2rem' }}>
+
+          <article className="card glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1.2rem', fontWeight: '500' }}>Distribuição de Status Atual</h3>
+            <div style={{ width: '100%', height: 250 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {donutData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip contentStyle={{ background: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#fff' }} />
+                  <Legend verticalAlign="bottom" height={36} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </article>
+
+          <article className="card glass" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '500' }}>Histórico de Disponibilidade</h3>
+              <div className="period-selector" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button className={`btn-period ${timelinePeriod === 1 ? 'active' : ''}`} onClick={() => setTimelinePeriod(1)}>1 hora</button>
+                <button className={`btn-period ${timelinePeriod === 24 ? 'active' : ''}`} onClick={() => setTimelinePeriod(24)}>24 horas</button>
+                <button className={`btn-period ${timelinePeriod === 168 ? 'active' : ''}`} onClick={() => setTimelinePeriod(168)}>1 semana</button>
+                <button className={`btn-period ${timelinePeriod === 720 ? 'active' : ''}`} onClick={() => setTimelinePeriod(720)}>1 mês</button>
+                <button className={`btn-period ${timelinePeriod === 2160 ? 'active' : ''}`} onClick={() => setTimelinePeriod(2160)}>3 meses</button>
+              </div>
+            </div>
+            <div style={{ width: '100%', padding: '1rem 0' }}>
+              {historyData.length === 0 && ramais.length === 0 ? (
+                <div style={{ display: 'flex', height: '150px', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                  Nenhum evento ou ramal registrado ainda.
+                </div>
+              ) : (
+                <div className="custom-timeline">
+                  <div className="timeline-tracks">
+                    {timelineTracks.map(track => (
+                      <div key={track.ramal} className="timeline-row">
+                        <div className="timeline-label">{track.ramal}</div>
+                        <div className="timeline-bar-container">
+                          {track.intervals.map((interval, i) => {
+                            const left = ((interval.start - xAxisMin) / (xAxisMax - xAxisMin)) * 100;
+                            const width = ((interval.end - interval.start) / (xAxisMax - xAxisMin)) * 100;
+                            if (width <= 0 || left > 100 || left + width < 0) return null;
+
+                            const safeLeft = Math.max(0, left);
+                            const safeWidth = left < 0 ? width + left : Math.min(100 - safeLeft, width);
+
+                            return (
+                              <div
+                                key={i}
+                                className={`timeline-segment ${interval.status}`}
+                                style={{ left: `${safeLeft}%`, width: `${safeWidth}%` }}
+                              >
+                                <div className="timeline-tooltip">
+                                  <strong style={{ color: interval.status === 'online' ? '#00d2ff' : '#ff4b4b' }}>
+                                    {interval.status === 'online' ? 'Online' : 'Offline'}
+                                  </strong>
+                                  <div>De: {format(new Date(interval.start), 'dd/MM HH:mm:ss')}</div>
+                                  <div>Até: {format(new Date(interval.end), 'dd/MM HH:mm:ss')}</div>
+                                  <div className="duration">
+                                    Duração: {formatDuration(new Date(interval.start).toISOString())}
+                                    {/* Wait, formatDuration from earlier expects a start time compared to NOW.
+                                        We need a diff formatter. Let's write it inline. */}
+                                    {(() => {
+                                      const diffMs = interval.end - interval.start;
+                                      const diffMins = Math.floor(diffMs / 60000);
+                                      if (diffMins < 60) return `${diffMins}m`;
+                                      const hrs = Math.floor(diffMins / 60);
+                                      const mins = diffMins % 60;
+                                      if (hrs < 24) return `${hrs}h ${mins}m`;
+                                      return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="timeline-xaxis">
+                    <div className="timeline-label-spacer"></div>
+                    <div className="timeline-ticks">
+                      {getTicks().map((tick, i) => (
+                        <div key={i} className="timeline-tick" style={{ left: `${(i / (timelinePeriod > 24 ? 6 : 5)) * 100}%` }}>
+                          <span className="tick-mark"></span>
+                          <span className="tick-label" style={{ textTransform: 'capitalize' }}>{formatTick(tick)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </article>
+
+        </section>
+
+        {/* Logs Section */}
+        <section className="logs-section" style={{ marginBottom: '2rem' }}>
+          <div className="card glass" style={{ padding: '0' }}>
+            <div className="card-header" style={{ padding: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: '500', margin: 0 }}>Registro de Eventos Recentes</h2>
+            </div>
+            <div className="logs-container" style={{ maxHeight: '200px', overflowY: 'auto', padding: '1rem' }}>
+              {historyData.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Nenhum evento registrado.</div>
+              ) : (
+                [...historyData].reverse().map((event, index) => {
+                  const dateObj = safeDateObj(event.timestamp);
+                  const isOffline = event.status.toLowerCase() === 'offline';
+                  return (
+                    <div key={index} className="log-entry" style={{ padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.9rem' }}>
+                      <span style={{ color: 'var(--text-muted)', marginRight: '1rem', fontFamily: 'monospace' }}>[{format(dateObj, 'HH:mm:ss')}]</span>
+                      <span>Ramal <strong>{event.ramal}</strong> alterou o status para </span>
+                      <strong style={{ color: isOffline ? '#ff4b4b' : '#00d2ff' }}>{event.status.toUpperCase()}</strong>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
         </section>
 
         {/* Active Channels Table */}

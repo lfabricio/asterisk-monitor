@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
 from dotenv import load_dotenv
+import asyncio
+from database import init_db, log_status_if_changed, get_status_history, get_current_statuses
 
 load_dotenv()
 
@@ -17,11 +19,33 @@ TIMEOUT = 5.0
 # Cliente HTTP compartilhado para reuso de conexões (boa prática no httpx)
 http_client = httpx.AsyncClient(auth=(ARI_USER, ARI_PASS), timeout=TIMEOUT)
 
+async def background_monitor_task():
+    while True:
+        try:
+            response = await http_client.get(f"{ARI_BASE}/endpoints/PJSIP")
+            if response.status_code == 200:
+                endpoints = response.json()
+                for ep in endpoints:
+                    resource = ep.get("resource", "")
+                    if resource.isdigit():
+                        estado = ep.get("state", "unknown")
+                        log_status_if_changed(resource, estado)
+        except Exception as e:
+            print(f"Error in background monitor: {e}")
+        await asyncio.sleep(10)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Setup
+    init_db()
+    task = asyncio.create_task(background_monitor_task())
     yield
     # Teardown
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
     await http_client.aclose()
 
 app = FastAPI(title="Asterisk Monitor API", lifespan=lifespan)
@@ -104,6 +128,22 @@ async def monitor_channels():
         return {"total_channels": len(canais), "raw_data": canais}
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar canais globais: {str(e)}")
+
+@app.get("/api/monitor/history")
+async def monitor_history(hours: int = 24):
+    """Retorna o histórico de eventos de status do período."""
+    try:
+        return get_status_history(hours)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar histórico: {str(e)}")
+
+@app.get("/api/monitor/stats")
+async def monitor_stats():
+    """Retorna o status atual persistido para estatísticas globais."""
+    try:
+        return get_current_statuses()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar estatísticas: {str(e)}")
 
 # Monta a pasta frontend para ser servida na raiz ("/")
 # O caminho é "../frontend" porque este script está dentro da pasta "backend"
