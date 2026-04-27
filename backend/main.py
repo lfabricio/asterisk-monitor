@@ -1,12 +1,14 @@
 import os
+import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
 from dotenv import load_dotenv
 import asyncio
 from database import init_db, log_status_if_changed, get_status_history, get_current_statuses
+from webex_notifier import send_webex_alert
 
 load_dotenv()
 
@@ -16,23 +18,44 @@ ARI_PASS = os.getenv("ARI_PASS", "REDACTED_ARI_PASSWORD")
 
 TIMEOUT = 5.0
 
+last_frontend_activity = time.time()
+
 # Cliente HTTP compartilhado para reuso de conexões (boa prática no httpx)
 http_client = httpx.AsyncClient(auth=(ARI_USER, ARI_PASS), timeout=TIMEOUT)
 
 async def background_monitor_task():
+    global last_frontend_activity
+    last_asterisk_query = 0
+    
     while True:
-        try:
-            response = await http_client.get(f"{ARI_BASE}/endpoints/PJSIP")
-            if response.status_code == 200:
-                endpoints = response.json()
-                for ep in endpoints:
-                    resource = ep.get("resource", "")
-                    if resource.isdigit():
-                        estado = ep.get("state", "unknown")
-                        log_status_if_changed(resource, estado)
-        except Exception as e:
-            print(f"Error in background monitor: {e}")
-        await asyncio.sleep(10)
+        now = time.time()
+        time_since_activity = now - last_frontend_activity
+        time_since_query = now - last_asterisk_query
+        
+        # Se a última atividade ocorreu há menos de 30 segundos, consideramos "ativo"
+        is_active = time_since_activity < 30
+        target_interval = 10 if is_active else 300  # 10s ou 5min
+        
+        if time_since_query >= target_interval:
+            try:
+                response = await http_client.get(f"{ARI_BASE}/endpoints/PJSIP")
+                if response.status_code == 200:
+                    endpoints = response.json()
+                    for ep in endpoints:
+                        resource = ep.get("resource", "")
+                        if resource.isdigit():
+                            estado = ep.get("state", "unknown")
+                            changed = log_status_if_changed(resource, estado)
+                            if changed:
+                                # Dispara o alerta em background (sem bloquear o loop)
+                                asyncio.create_task(send_webex_alert(resource, estado))
+            except Exception as e:
+                print(f"Error in background monitor: {e}")
+            
+            last_asterisk_query = time.time()
+            
+        # Dorme por apenas 1 segundo para poder acordar imediatamente se o usuário acessar
+        await asyncio.sleep(1)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,6 +72,14 @@ async def lifespan(app: FastAPI):
     await http_client.aclose()
 
 app = FastAPI(title="Asterisk Monitor API", lifespan=lifespan)
+
+@app.middleware("http")
+async def track_activity(request: Request, call_next):
+    global last_frontend_activity
+    # Atualiza o timestamp de atividade sempre que recebe requisição na API
+    last_frontend_activity = time.time()
+    response = await call_next(request)
+    return response
 
 app.add_middleware(
     CORSMiddleware,
