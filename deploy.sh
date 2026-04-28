@@ -7,26 +7,23 @@
 # Pré-requisitos:
 #   - ~/.secrets/dokploy-token (chmod 600)
 #   - .env preenchido com ARI_*, WEBEX_*
-#   - Uma SSH key cadastrada no Dokploy (Painel > Settings > SSH Keys),
-#     com a chave pública correspondente como Deploy Key no repo do GitHub.
-#     Exporte o ID da key como DOKPLOY_SSH_KEY_ID antes de rodar:
-#       export DOKPLOY_SSH_KEY_ID=...
+#   - Repo público no GitHub (sem precisar de SSH key)
 
 set -euo pipefail
 
 # ---------- Config ----------
-DOKPLOY_HOST="${DOKPLOY_HOST:-ASTERISK_HOST}"
+DOKPLOY_HOST="${DOKPLOY_HOST:-10.10.20.9}"
 DOKPLOY_API="http://${DOKPLOY_HOST}:3000/api"
 PROJECT_NAME="${PROJECT_NAME:-Asterisk Monitor}"
 
-GIT_URL="${GIT_URL:-git@github.com:lfabricio/asterisk-monitor.git}"
+GIT_URL="${GIT_URL:-https://github.com/lfabricio/asterisk-monitor.git}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 
 BACKEND_APP_NAME="${BACKEND_APP_NAME:-asterisk-monitor-backend}"
-BACKEND_BUILD_PATH="${BACKEND_BUILD_PATH:-/backend}"
+BACKEND_SUBDIR="backend"
 
 FRONTEND_APP_NAME="${FRONTEND_APP_NAME:-asterisk-monitor-frontend}"
-FRONTEND_BUILD_PATH="${FRONTEND_BUILD_PATH:-/frontend}"
+FRONTEND_SUBDIR="frontend"
 FRONTEND_PUBLISHED_PORT="${FRONTEND_PUBLISHED_PORT:-8080}"
 
 TOKEN_FILE="${HOME}/.secrets/dokploy-token"
@@ -36,14 +33,6 @@ TOKEN="$(cat "$TOKEN_FILE")"
 [[ -f .env ]] || { echo "ERRO: copie .env.example para .env e preencha"; exit 1; }
 # shellcheck disable=SC1091
 set -a; source .env; set +a
-
-[[ -n "${DOKPLOY_SSH_KEY_ID:-}" ]] || {
-  echo "ERRO: defina DOKPLOY_SSH_KEY_ID com o ID da chave SSH cadastrada no Dokploy."
-  echo "      Liste em http://${DOKPLOY_HOST}:3000 → Settings → SSH Keys"
-  echo "      Ou via API:"
-  echo "        curl -s -H 'x-api-key: \$(cat ~/.secrets/dokploy-token)' http://${DOKPLOY_HOST}:3000/api/sshKey.all | jq"
-  exit 1
-}
 
 for cmd in jq curl python3; do
   command -v "$cmd" >/dev/null || { echo "ERRO: '$cmd' não instalado"; exit 1; }
@@ -82,21 +71,19 @@ ensure_app() {
 }
 
 set_source_git() {
-  local app_id="$1" build_path="$2"
+  local app_id="$1"
   api_post application.update -d "$(jq -nc --arg id "$app_id" '{applicationId:$id, sourceType:"git"}')" >/dev/null
   api_post application.saveGitProvider -d "$(jq -nc \
       --arg id  "$app_id" \
       --arg url "$GIT_URL" \
       --arg br  "$GIT_BRANCH" \
-      --arg bp  "$build_path" \
-      --arg key "$DOKPLOY_SSH_KEY_ID" \
-      '{applicationId:$id, customGitUrl:$url, customGitBranch:$br, customGitBuildPath:$bp, customGitSSHKeyId:$key, watchPaths:[]}')" >/dev/null
+      '{applicationId:$id, customGitUrl:$url, customGitBranch:$br, customGitBuildPath:"/", watchPaths:[]}')" >/dev/null
 }
 
 set_build_dockerfile() {
-  local app_id="$1"
-  api_post application.saveBuildType -d "$(jq -nc --arg id "$app_id" \
-      '{applicationId:$id, buildType:"dockerfile", dockerfile:"Dockerfile", dockerContextPath:".", dockerBuildStage:"", herokuVersion:"", railpackVersion:""}')" >/dev/null
+  local app_id="$1" subdir="$2"
+  api_post application.saveBuildType -d "$(jq -nc --arg id "$app_id" --arg sd "$subdir" \
+      '{applicationId:$id, buildType:"dockerfile", dockerfile:($sd+"/Dockerfile"), dockerContextPath:$sd, dockerBuildStage:"", herokuVersion:"", railpackVersion:""}')" >/dev/null
 }
 
 set_env() {
@@ -110,10 +97,14 @@ ensure_port() {
   local app_id="$1" published="$2" target="$3"
   local existing
   existing="$(get_app "$app_id" | jq -r --argjson p "$published" '.ports[]? | select(.publishedPort==$p) | .portId' | head -1)"
-  [[ -n "$existing" ]] && return 0
+  if [[ -n "$existing" ]]; then
+    api_post port.update -d "$(jq -nc --arg pid "$existing" --argjson p "$published" --argjson t "$target" \
+        '{portId:$pid, publishedPort:$p, targetPort:$t, protocol:"tcp", publishMode:"host"}')" >/dev/null
+    return 0
+  fi
   api_post port.create -d "$(jq -nc \
       --arg id "$app_id" --argjson p "$published" --argjson t "$target" \
-      '{applicationId:$id, publishedPort:$p, targetPort:$t, protocol:"tcp"}')" >/dev/null
+      '{applicationId:$id, publishedPort:$p, targetPort:$t, protocol:"tcp", publishMode:"host"}')" >/dev/null
 }
 
 deploy_app() {
@@ -135,8 +126,8 @@ echo "    projectId=${PROJECT_ID}  environmentId=${ENV_ID}"
 echo "==> [2/5] Backend application..."
 BACKEND_ID="$(ensure_app "$BACKEND_APP_NAME")"
 echo "    applicationId=${BACKEND_ID}"
-set_source_git       "$BACKEND_ID" "$BACKEND_BUILD_PATH"
-set_build_dockerfile "$BACKEND_ID"
+set_source_git       "$BACKEND_ID"
+set_build_dockerfile "$BACKEND_ID" "$BACKEND_SUBDIR"
 BACKEND_ENV="$(printf 'ARI_BASE=%s\nARI_USER=%s\nARI_PASS=%s\nWEBEX_BOT_TOKEN=%s\nWEBEX_ROOM_ID=%s\nDB_FILE=/data/history.db\n' \
   "${ARI_BASE}" "${ARI_USER}" "${ARI_PASS}" "${WEBEX_BOT_TOKEN:-}" "${WEBEX_ROOM_ID:-}")"
 set_env "$BACKEND_ID" "$BACKEND_ENV"
@@ -150,8 +141,8 @@ echo "    backend appName real = ${BACKEND_APPNAME_REAL}"
 echo "==> [4/5] Frontend application..."
 FRONTEND_ID="$(ensure_app "$FRONTEND_APP_NAME")"
 echo "    applicationId=${FRONTEND_ID}"
-set_source_git       "$FRONTEND_ID" "$FRONTEND_BUILD_PATH"
-set_build_dockerfile "$FRONTEND_ID"
+set_source_git       "$FRONTEND_ID"
+set_build_dockerfile "$FRONTEND_ID" "$FRONTEND_SUBDIR"
 FRONTEND_ENV="$(printf 'BACKEND_UPSTREAM=%s:8000\n' "$BACKEND_APPNAME_REAL")"
 set_env "$FRONTEND_ID" "$FRONTEND_ENV"
 ensure_port "$FRONTEND_ID" "$FRONTEND_PUBLISHED_PORT" 80
