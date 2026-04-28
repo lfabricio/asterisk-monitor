@@ -258,7 +258,20 @@ function App() {
       <main className="content-wrapper">
         <header>
           <div className="logo-wrapper">
-            <div className={`status-indicator ${globalStatus}`}></div>
+            <div className="status-indicator-wrapper">
+              <div className={`status-indicator ${globalStatus}`}></div>
+              <div className="status-indicator-tooltip">
+                <strong>Conexão com o Asterisk (PBX)</strong>
+                <div className="status-legend">
+                  <span><span className="dot green"></span> Online — API do Asterisk respondendo</span>
+                  <span><span className="dot red"></span> Offline — Asterisk inacessível</span>
+                  <span><span className="dot yellow"></span> Carregando — Verificando conexão...</span>
+                </div>
+                <div className="status-current">
+                  Status atual: <strong>{globalStatus === 'online' ? '✅ Online' : globalStatus === 'offline' ? '❌ Offline' : '⏳ Carregando'}</strong>
+                </div>
+              </div>
+            </div>
             <h1>Asterisk Monitor</h1>
           </div>
           <p>Painel de Controle em Tempo Real</p>
@@ -349,8 +362,8 @@ function App() {
                                   <strong style={{ color: interval.status === 'online' ? '#00d2ff' : '#ff4b4b' }}>
                                     {interval.status === 'online' ? 'Online' : 'Offline'}
                                   </strong>
-                                  <div>De: {format(new Date(interval.start), 'dd/MM HH:mm:ss')}</div>
-                                  <div>Até: {format(new Date(interval.end), 'dd/MM HH:mm:ss')}</div>
+                                  <div>De: {format(new Date(interval.start), 'dd/MM HH:mm:ss', { locale: ptBR })}</div>
+                                  <div>Até: {format(new Date(interval.end), 'dd/MM HH:mm:ss', { locale: ptBR })}</div>
                                   <div className="duration">
                                     Duração: {formatDuration(new Date(interval.start).toISOString())}
                                     {/* Wait, formatDuration from earlier expects a start time compared to NOW.

@@ -60,6 +60,8 @@ header {
   text-align: center;
   margin-bottom: 3rem;
   animation: fadeInDown 0.8s ease-out forwards;
+  position: relative;
+  z-index: 100;
 }
 
 .logo-wrapper {
@@ -87,6 +89,73 @@ header {
 .status-indicator.offline {
   background-color: var(--danger);
   box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+}
+
+.status-indicator-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.status-indicator-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  top: 130%;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: rgba(10, 15, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 14px 18px;
+  z-index: 200;
+  white-space: nowrap;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transition: all 0.25s ease;
+  pointer-events: none;
+}
+
+.status-indicator-wrapper:hover .status-indicator-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.status-indicator-tooltip strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.status-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.status-legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.status-legend .dot.green { background-color: var(--success); }
+.status-legend .dot.red { background-color: var(--danger); }
+.status-legend .dot.yellow { background-color: var(--warning); }
+
+.status-current {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 h1 {

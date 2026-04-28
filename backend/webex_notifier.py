@@ -1,9 +1,12 @@
 import os
 import httpx
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
+
+# Fuso horário do Brasil (UTC-3 fixo — horário de verão abolido desde 2019)
+BRAZIL_TZ = timezone(timedelta(hours=-3))
 
 async def send_webex_alert(ramal: str, status: str):
     """
@@ -16,7 +19,7 @@ async def send_webex_alert(ramal: str, status: str):
         # Se as credenciais não estiverem configuradas, apenas ignoramos silenciosamente
         return
 
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    now_str = datetime.now(timezone.utc).astimezone(BRAZIL_TZ).strftime("%d/%m/%Y %H:%M:%S")
     status_lower = status.lower()
 
     if status_lower == "offline":
