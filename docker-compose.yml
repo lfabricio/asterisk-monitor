@@ -1,0 +1,35 @@
+services:
+  backend:
+    image: asterisk-monitor-backend:latest
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      ARI_BASE: ${ARI_BASE}
+      ARI_USER: ${ARI_USER}
+      ARI_PASS: ${ARI_PASS}
+      WEBEX_BOT_TOKEN: ${WEBEX_BOT_TOKEN:-}
+      WEBEX_ROOM_ID: ${WEBEX_ROOM_ID:-}
+      DB_FILE: /data/history.db
+    volumes:
+      - asterisk-monitor-data:/data
+    networks:
+      - asterisk-monitor
+
+  frontend:
+    image: asterisk-monitor-frontend:latest
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      BACKEND_UPSTREAM: backend:8000
+    ports:
+      - "8080:80"
+    networks:
+      - asterisk-monitor
+
+volumes:
+  asterisk-monitor-data:
+
+networks:
+  asterisk-monitor:

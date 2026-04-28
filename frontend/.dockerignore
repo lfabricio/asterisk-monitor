@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-ssr/
+.eslintcache
+coverage/
+.git/
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+.env
+.env.local
+*.log

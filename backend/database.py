@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from contextlib import contextmanager
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "history.db")
+DB_FILE = os.environ.get("DB_FILE", os.path.join(os.path.dirname(__file__), "history.db"))
 
 def init_db():
     with get_db_connection() as conn:

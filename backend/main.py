@@ -3,7 +3,6 @@ import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import httpx
 from dotenv import load_dotenv
 import asyncio
@@ -12,9 +11,9 @@ from webex_notifier import send_webex_alert
 
 load_dotenv()
 
-ARI_BASE = os.getenv("ARI_BASE", "http://ASTERISK_HOST:8088/ari")
-ARI_USER = os.getenv("ARI_USER", "ari_user")
-ARI_PASS = os.getenv("ARI_PASS", "REDACTED_ARI_PASSWORD")
+ARI_BASE = os.environ["ARI_BASE"]
+ARI_USER = os.environ["ARI_USER"]
+ARI_PASS = os.environ["ARI_PASS"]
 
 TIMEOUT = 5.0
 
@@ -175,10 +174,6 @@ async def monitor_stats():
         return get_current_statuses()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar estatísticas: {str(e)}")
-
-# Monta a pasta frontend para ser servida na raiz ("/")
-# O caminho é "../frontend" porque este script está dentro da pasta "backend"
-app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../frontend"), html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

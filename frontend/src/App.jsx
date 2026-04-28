@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import './App.css';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = '/api';
 
 function App() {
   const [systemInfo, setSystemInfo] = useState({ version: '--', startup: '--', status: 'loading' });

@@ -3,6 +3,9 @@ examples/
 __pycache__/
 *.pyc
 venv/
+backend/history.db
+*.tar
+*.tar.gz
 
 # Frontend (React/Vite)
 frontend/node_modules/
