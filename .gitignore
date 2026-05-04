@@ -6,6 +6,9 @@ venv/
 backend/history.db
 *.tar
 *.tar.gz
+*.deb
+*.exe
+test_env/node_modules/
 
 # Frontend (React/Vite)
 frontend/node_modules/

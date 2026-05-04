@@ -419,7 +419,7 @@ function App() {
                   const isOffline = event.status.toLowerCase() === 'offline';
                   return (
                     <div key={index} className="log-entry" style={{ padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.9rem' }}>
-                      <span style={{ color: 'var(--text-muted)', marginRight: '1rem', fontFamily: 'monospace' }}>[{format(dateObj, 'HH:mm:ss')}]</span>
+                      <span style={{ color: 'var(--text-muted)', marginRight: '1rem', fontFamily: 'monospace' }}>[{format(dateObj, 'dd/MM/yyyy HH:mm:ss')}]</span>
                       <span>Ramal <strong>{event.ramal}</strong> alterou o status para </span>
                       <strong style={{ color: isOffline ? '#ff4b4b' : '#00d2ff' }}>{event.status.toUpperCase()}</strong>
                     </div>
