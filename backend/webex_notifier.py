@@ -2,6 +2,7 @@ import os
 import httpx
 import logging
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ async def send_webex_alert(ramal: str, status: str):
         # Se as credenciais não estiverem configuradas, apenas ignoramos silenciosamente
         return
 
-    now_str = datetime.now(timezone.utc).astimezone(BRAZIL_TZ).strftime("%d/%m/%Y %H:%M:%S")
+    now_str = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
     status_lower = status.lower()
 
     if status_lower == "offline":
