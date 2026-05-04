@@ -40,28 +40,60 @@ def log_status_if_changed(ramal: str, status: str):
     """
     Checks if the status changed since the last check.
     If it did, logs the new status to ramal_status_log and updates ramal_current_status.
-    Returns True if changed, False otherwise.
+    Returns a dict with change metadata.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
         cursor.execute('SELECT status FROM ramal_current_status WHERE ramal = ?', (ramal,))
         row = cursor.fetchone()
+        cursor.execute(
+            '''
+            SELECT status
+            FROM ramal_status_log
+            WHERE ramal = ?
+              AND lower(status) IN ('online', 'offline')
+            ORDER BY id DESC
+            LIMIT 1
+            ''',
+            (ramal,),
+        )
+        previous_notifiable_row = cursor.fetchone()
+        previous_notifiable_status = previous_notifiable_row['status'] if previous_notifiable_row else None
         
         if row is None:
             # First time seeing this ramal
             cursor.execute('INSERT INTO ramal_current_status (ramal, status) VALUES (?, ?)', (ramal, status))
             cursor.execute('INSERT INTO ramal_status_log (ramal, status) VALUES (?, ?)', (ramal, status))
             conn.commit()
-            return True
+            return {
+                "changed": True,
+                "first_seen": True,
+                "previous_status": None,
+                "previous_notifiable_status": previous_notifiable_status,
+                "current_status": status,
+            }
         elif row['status'] != status:
             # Status changed
+            previous_status = row['status']
             cursor.execute('UPDATE ramal_current_status SET status = ?, last_updated = CURRENT_TIMESTAMP WHERE ramal = ?', (status, ramal))
             cursor.execute('INSERT INTO ramal_status_log (ramal, status) VALUES (?, ?)', (ramal, status))
             conn.commit()
-            return True
+            return {
+                "changed": True,
+                "first_seen": False,
+                "previous_status": previous_status,
+                "previous_notifiable_status": previous_notifiable_status,
+                "current_status": status,
+            }
             
-        return False
+        return {
+            "changed": False,
+            "first_seen": False,
+            "previous_status": row['status'],
+            "previous_notifiable_status": previous_notifiable_status,
+            "current_status": status,
+        }
 
 def get_status_history(hours: int = 24):
     """

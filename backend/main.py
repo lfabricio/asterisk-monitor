@@ -22,6 +22,29 @@ last_frontend_activity = time.time()
 # Cliente HTTP compartilhado para reuso de conexões (boa prática no httpx)
 http_client = httpx.AsyncClient(auth=(ARI_USER, ARI_PASS), timeout=TIMEOUT)
 
+def should_send_webex_alert(
+    previous_status: str | None,
+    current_status: str,
+    previous_notifiable_status: str | None = None,
+) -> bool:
+    previous = previous_status.lower() if previous_status else None
+    current = current_status.lower()
+
+    if (previous, current) in {
+        ("online", "offline"),
+        ("offline", "online"),
+    }:
+        return True
+
+    if previous == "unknown":
+        last_notifiable = previous_notifiable_status.lower() if previous_notifiable_status else None
+        return (last_notifiable, current) in {
+            ("online", "offline"),
+            ("offline", "online"),
+        }
+
+    return False
+
 async def background_monitor_task():
     global last_frontend_activity
     last_asterisk_query = 0
@@ -44,8 +67,12 @@ async def background_monitor_task():
                         resource = ep.get("resource", "")
                         if resource.isdigit():
                             estado = ep.get("state", "unknown")
-                            changed = log_status_if_changed(resource, estado)
-                            if changed:
+                            status_change = log_status_if_changed(resource, estado)
+                            if status_change["changed"] and should_send_webex_alert(
+                                status_change["previous_status"],
+                                status_change["current_status"],
+                                status_change["previous_notifiable_status"],
+                            ):
                                 # Dispara o alerta em background (sem bloquear o loop)
                                 asyncio.create_task(send_webex_alert(resource, estado))
             except Exception as e:
