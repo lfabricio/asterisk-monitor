@@ -527,3 +527,56 @@ footer {
   color: rgba(255,255,255,0.7);
   white-space: nowrap;
 }
+
+/* Banner de Alerta - Asterisk Offline */
+.alert-banner {
+  width: 100%;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: fadeInDown 0.5s ease-out forwards;
+}
+
+.alert-banner--error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.alert-banner__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.alert-banner__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.alert-banner__text {
+  flex: 1;
+}
+
+.alert-banner__text strong {
+  display: block;
+  color: #fca5a5;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.alert-banner__text p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.alert-banner__timer {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  padding-left: 2.25rem;
+}

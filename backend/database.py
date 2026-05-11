@@ -25,6 +25,26 @@ def init_db():
                 last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Table to track Asterisk server connectivity (instability history)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS asterisk_connectivity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL CHECK(status IN ('online', 'offline')),
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Current connectivity state (singleton row)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS asterisk_current_connectivity (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                status TEXT NOT NULL DEFAULT 'unknown',
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Ensure the singleton row exists
+        cursor.execute('''
+            INSERT OR IGNORE INTO asterisk_current_connectivity (id, status) VALUES (1, 'unknown')
+        ''')
         conn.commit()
 
 @contextmanager
@@ -149,3 +169,87 @@ def get_current_statuses():
         cursor = conn.cursor()
         cursor.execute('SELECT ramal, status, last_updated FROM ramal_current_status')
         return [dict(row) for row in cursor.fetchall()]
+
+
+def log_asterisk_connectivity(is_online: bool) -> dict:
+    """
+    Logs Asterisk server connectivity status if changed.
+    Returns a dict with change metadata.
+    """
+    new_status = "online" if is_online else "offline"
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT status FROM asterisk_current_connectivity WHERE id = 1')
+        row = cursor.fetchone()
+
+        if row is None or row['status'] != new_status:
+            previous = row['status'] if row else 'unknown'
+            cursor.execute('''
+                UPDATE asterisk_current_connectivity
+                SET status = ?, last_updated = CURRENT_TIMESTAMP
+                WHERE id = 1
+            ''', (new_status,))
+            cursor.execute('''
+                INSERT INTO asterisk_connectivity_log (status) VALUES (?)
+            ''', (new_status,))
+            conn.commit()
+            return {"changed": True, "previous_status": previous, "current_status": new_status}
+
+        return {"changed": False, "previous_status": row['status'], "current_status": new_status}
+
+
+def get_asterisk_connectivity_history(hours: int = 24):
+    """
+    Returns the Asterisk connectivity history for the last N hours.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        time_modifier = f'-{hours} hours'
+
+        cursor.execute("SELECT datetime('now', ?)", (time_modifier,))
+        start_time_str = cursor.fetchone()[0]
+
+        # Get the most recent status before the period
+        cursor.execute('''
+            SELECT status, timestamp
+            FROM asterisk_connectivity_log
+            WHERE timestamp < ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''', (start_time_str,))
+        previous = cursor.fetchone()
+
+        # Get events within the period
+        cursor.execute('''
+            SELECT status, timestamp
+            FROM asterisk_connectivity_log
+            WHERE timestamp >= ?
+            ORDER BY timestamp ASC
+        ''', (start_time_str,))
+        events = [dict(row) for row in cursor.fetchall()]
+
+        history = []
+        if previous:
+            history.append({
+                "status": previous["status"],
+                "timestamp": start_time_str
+            })
+
+        history.extend(events)
+        return history
+
+
+def get_asterisk_current_connectivity():
+    """
+    Returns the current Asterisk connectivity status.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT status, last_updated FROM asterisk_current_connectivity WHERE id = 1')
+        row = cursor.fetchone()
+        if row:
+            return {"status": row["status"], "last_updated": row["last_updated"]}
+        return {"status": "unknown", "last_updated": None}

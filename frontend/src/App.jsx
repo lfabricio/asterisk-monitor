@@ -17,6 +17,8 @@ function App() {
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [historyData, setHistoryData] = useState([]);
   const [timelinePeriod, setTimelinePeriod] = useState(24);
+  const [asteriskOnline, setAsteriskOnline] = useState(true);
+  const [asteriskLastError, setAsteriskLastError] = useState(null);
 
   const formatStartupTime = (dateString) => {
     try {
@@ -102,6 +104,24 @@ function App() {
   const fetchDashboardData = useCallback(async () => {
     setIsSpinning(true);
     let sysOk = false;
+
+    // Primeiro faz o health check para saber status do Asterisk
+    try {
+      const healthRes = await fetch(`${API_BASE_URL}/health`);
+      if (healthRes.ok) {
+        const healthData = await healthRes.json();
+        const isOnline = healthData.asterisk?.online === true;
+        setAsteriskOnline(isOnline);
+        if (!isOnline) {
+          setAsteriskLastError(healthData.asterisk?.error || 'unknown');
+        } else {
+          setAsteriskLastError(null);
+        }
+      }
+    } catch (err) {
+      setAsteriskOnline(false);
+      setAsteriskLastError('backend_unreachable');
+    }
 
     try {
       const sysRes = await fetch(`${API_BASE_URL}/asterisk/info`);
@@ -276,6 +296,28 @@ function App() {
           </div>
           <p>Painel de Controle em Tempo Real</p>
         </header>
+
+        {/* Banner de Alerta: Asterisk Offline */}
+        {!asteriskOnline && (
+          <div className="alert-banner alert-banner--error" role="alert">
+            <div className="alert-banner__content">
+              <span className="alert-banner__icon">🔴</span>
+              <div className="alert-banner__text">
+                <strong>Servidor Asterisk (PBX) inacessível</strong>
+                <p>
+                  {asteriskLastError === 'connection_refused' && 'Conexão recusada — verifique se o serviço Asterisk está rodando e a porta ARI correta.'}
+                  {asteriskLastError === 'timeout' && 'Tempo limite de conexão excedido — o servidor pode estar sobrecarregado ou inacessível.'}
+                  {asteriskLastError === 'backend_unreachable' && 'Backend do monitor inacessível — verifique se o servidor backend está rodando.'}
+                  {asteriskLastError === 'unknown' && 'Erro desconhecido ao conectar com o Asterisk. Verifique logs do backend.'}
+                  {!['connection_refused', 'timeout', 'backend_unreachable', 'unknown'].includes(asteriskLastError) && `Erro: ${asteriskLastError}`}
+                </p>
+              </div>
+            </div>
+            <div className="alert-banner__timer">
+              Os dados podem estar desatualizados. O monitor tentará reconectar automaticamente.
+            </div>
+          </div>
+        )}
 
         {/* Global Summary */}
         <section className="dashboard" style={{ marginBottom: '2rem' }}>
